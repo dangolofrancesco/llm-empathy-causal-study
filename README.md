@@ -24,8 +24,6 @@ graph TD
 
     subgraph "Causal Path"
         T[T: LLM Empathy Score]
-        M1["M1: User's Perceived Understanding"]
-        M2["M2: User's Emotional Change (The 'Difference')"]
         Y[Y: User Attachment Score]
     end
 
@@ -40,10 +38,6 @@ graph TD
     X2 --> Y
     X3 --> T
     X3 --> Y
-
-    %% Causal Path (with Mediators)
-    T --> M1 --> Y
-    T --> M2 --> Y
 
     %% Moderator Paths (showing they affect the T->Y relationship)
     Z1 -- affects --> T
