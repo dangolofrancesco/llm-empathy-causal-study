@@ -23,8 +23,10 @@ graph TD
     end
 
     subgraph "Causal Path"
-        T[T: LLM Empathy Score]
-        Y[Y: User Attachment Score]
+        T["T: LLM Empathy Score"]
+        M1["M1: User's Perceived Understanding"]
+        M2["M2: User's Emotional Change (The 'Difference')"]
+        Y["Y: User Attachment Score"]
     end
 
     subgraph "Collider (to avoid)"
@@ -39,21 +41,24 @@ graph TD
     X3 --> T
     X3 --> Y
 
+    %% Causal Path (with Mediators)
+    T --> M1 --> Y
+    T --> M2 --> Y
+
     %% Moderator Paths (showing they affect the T->Y relationship)
     Z1 -- affects --> T
     Z1 -- affects --> Y
     Z2 -- affects --> T
     Z2 -- affects --> Y
 
-
     %% Collider Path
     T --> C1
     Y --> C1
 
-    %% Styling
-    classDef confounder fill:#fdd,stroke:#b00,stroke-width:2px
-    classDef moderator fill:#ddf,stroke:#00b,stroke-width:2px
-    classDef collider fill:#dfd,stroke:#0b0,stroke-width:2px
+    %% Styling (UPDATED with 'color' for text)
+    classDef confounder fill:#fdd,stroke:#b00,stroke-width:2px,color:#b00
+    classDef moderator fill:#ddf,stroke:#00b,stroke-width:2px,color:#00b
+    classDef collider fill:#dfd,stroke:#0b0,stroke-width:2px,color:#0b0
     class X1,X2,X3 confounder
     class Z1,Z2 moderator
     class C1 collider
