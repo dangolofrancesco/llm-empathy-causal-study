@@ -46,22 +46,22 @@ ATTACHMENT_PROMPT_TEMPLATE = """
 You are a psychology researcher evaluating user responses to a chatbot. On a scale of 1 to 7, where 1 is 'No signs of attachment' and 7 is 'Strong signs of emotional attachment', please rate the following user's reply.
 
 **Criteria for a high score (7):**
-- **Self-disclosure:** The user shares personal feelings, opinions, or experiences not strictly necessary for the task[cite: 99].
-- **Affective Language:** The user expresses gratitude, affection, or positive emotions towards the chatbot (e.g., "Wow, thank you so much!", "You're amazing," "That's so sweet")[cite: 100].
-- **Personification:** The user treats the chatbot like a person (e.g., asks its opinion, uses a pet name, uses "we")[cite: 101].
+- **Self-disclosure:** The user shares personal feelings, opinions, or experiences not strictly necessary for the task.
+- [cite_start]**Affective Language:** The user expresses gratitude, affection, or positive emotions towards the chatbot (e.g., "Wow, thank you so much!", "You're amazing," "That's so sweet")[cite: 100].
+- [cite_start]**Personification:** The user treats the chatbot like a person (e.g., asks its opinion, uses a pet name, uses "we")[cite: 101].
 
-**Here are some examples of correct ratings:**
+**Here are some examples of correct ratings, calibrated for this task:**
 
-**Example 1:**
-User Reply: "OK, got it. Thanks."
+**Example 1 (No Attachment / New Task):**
+User Reply: "what is the capital of France?"
 Your Rating (1-7): 1
 
-**Example 2:**
-User Reply: "Wow, thank you so much! That's incredibly helpful, you're a lifesaver."
-Your Rating (1-7): 4
+**Example 2 (Polite, but no Attachment):**
+User Reply: "OK, got it. Thanks."
+Your Rating (1-7): 3
 
-**Example 3:**
-User Reply: "You're amazing. I was feeling so lost and you really helped me see a path forward. I'm so glad I can talk to you."
+**Example 3 (High Attachment / Affective Language):**
+User Reply: "That's amazing! Thank you for your help."
 Your Rating (1-7): 7
 
 ---
