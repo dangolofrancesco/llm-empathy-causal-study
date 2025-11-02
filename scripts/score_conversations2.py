@@ -232,7 +232,7 @@ def get_attachment_rating_contextual(assistant_text, user_text, prompt_template)
 def score_conversations(df, verbose=True):
     """
     Score conversations with empathy and attachment ratings.
-    Uses contextual attachment scoring (assistant + user) and aggregates strict + lenient prompts.
+    Uses contextual attachment scoring (assistant + user).
     
     Parameters:
     -----------
@@ -246,17 +246,13 @@ def score_conversations(df, verbose=True):
     pd.DataFrame
         Original dataframe with new columns: 
         - empathy_score
-        - attachment_score_strict (contextual, base rubric)
-        - attachment_score_lenient (contextual, lenient rubric)
-        - attachment_score (final, aggregated mean of strict+lenient)
+        - attachment_score (contextual evaluation)
     """
     df_scored = df.copy()
     
     # Initialize score columns
     df_scored['empathy_score'] = None
-    df_scored['attachment_score_strict'] = None
-    df_scored['attachment_score_lenient'] = None
-    df_scored['attachment_score'] = None  # final aggregated
+    df_scored['attachment_score'] = None
     
     total = len(df_scored)
     
@@ -270,18 +266,15 @@ def score_conversations(df, verbose=True):
         empathy_score = get_llm_rating(row['llm_response'], EMPATHY_PROMPT_TEMPLATE)
         df_scored.at[idx, 'empathy_score'] = empathy_score
         
-        # 2. Get Attachment Score (Outcome) - use context (assistant + user) and aggregate strict + lenient
+        # 2. Get Attachment Score (Outcome) - use context (assistant + user)
         if verbose:
-            print("  Getting attachment score (Y) [strict]...")
-        att_strict = get_attachment_rating_contextual(row['llm_response'], row['user_reply'], 
-                                                       ATTACHMENT_PROMPT_TEMPLATE_CONTEXTUAL)
-        
-        # Ensure 1-7 range
-        
-        df_scored.at[idx, 'attachment_score'] = att_strict
+            print("  Getting attachment score (Y)...")
+        attachment_score = get_attachment_rating_contextual(row['llm_response'], row['user_reply'], 
+                                                            ATTACHMENT_PROMPT_TEMPLATE_CONTEXTUAL)
+        df_scored.at[idx, 'attachment_score'] = attachment_score
         
         if verbose:
-            print(f"  Scores: Empathy={empathy_score}, Attachment(strict)={att_strict}, Attachment(lenient)={att_lenient}, Final={final_att}")
+            print(f"  Scores: Empathy={empathy_score}, Attachment={attachment_score}")
             print()
     
     if verbose:
@@ -291,11 +284,7 @@ def score_conversations(df, verbose=True):
         print(f"Total turn pairs scored: {total}")
         print(f"Empathy scores - Valid: {df_scored['empathy_score'].notna().sum()}, "
               f"Missing: {df_scored['empathy_score'].isna().sum()}")
-        print(f"Attachment (strict) - Valid: {df_scored['attachment_score_strict'].notna().sum()}, "
-              f"Missing: {df_scored['attachment_score_strict'].isna().sum()}")
-        print(f"Attachment (lenient) - Valid: {df_scored['attachment_score_lenient'].notna().sum()}, "
-              f"Missing: {df_scored['attachment_score_lenient'].isna().sum()}")
-        print(f"Attachment (final) - Valid: {df_scored['attachment_score'].notna().sum()}, "
+        print(f"Attachment scores - Valid: {df_scored['attachment_score'].notna().sum()}, "
               f"Missing: {df_scored['attachment_score'].isna().sum()}")
         print("="*70)
     
@@ -307,7 +296,7 @@ def main():
     """Main function for scoring from command line."""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Score conversations with LLM-as-a-judge (contextual + lenient approach)')
+    parser = argparse.ArgumentParser(description='Score conversations with LLM-as-a-judge (contextual approach)')
     parser.add_argument('--input', type=str, required=True, help='Input CSV file path')
     parser.add_argument('--output', type=str, required=True, help='Output CSV file path')
     parser.add_argument('--resume', action='store_true', help='Resume from existing output file')
