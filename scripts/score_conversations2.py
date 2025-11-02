@@ -275,60 +275,10 @@ def score_conversations(df, verbose=True):
             print("  Getting attachment score (Y) [strict]...")
         att_strict = get_attachment_rating_contextual(row['llm_response'], row['user_reply'], 
                                                        ATTACHMENT_PROMPT_TEMPLATE_CONTEXTUAL)
-        df_scored.at[idx, 'attachment_score_strict'] = att_strict
-
-        if verbose:
-            print("  Getting attachment score (Y) [lenient]...")
-        att_lenient = get_attachment_rating_contextual(row['llm_response'], row['user_reply'], 
-                                                        ATTACHMENT_PROMPT_TEMPLATE_LENIENT)
-        df_scored.at[idx, 'attachment_score_lenient'] = att_lenient
-
-        # SMART AGGREGATION: Avoid score=4 by choosing intelligently between strict/lenient
-        candidates = [s for s in [att_strict, att_lenient] if s is not None]
-        if len(candidates) == 0:
-            final_att = 4
-        elif len(candidates) == 1:
-            # Only one score available, use it
-            final_att = candidates[0]
-        else:
-            # Both strict and lenient available - ALWAYS use rounded mean, avoid 4 only when necessary
-            mean_score = sum(candidates) / len(candidates)
-            rounded = int(round(mean_score))
-            
-            # Allow final=4 ONLY when:
-            # 1. Both strict and lenient are 4, OR
-            # 2. One is 4 and the mean is closer to 4 than to the other score
-            if att_strict == 4 and att_lenient == 4:
-                # Case 1: Both are 4, must accept it
-                final_att = 4
-            elif att_strict == 4 or att_lenient == 4:
-                # Case 2: One is 4, check if mean is closer to 4
-                other_score = att_lenient if att_strict == 4 else att_strict
-                dist_to_4 = abs(mean_score - 4)
-                dist_to_other = abs(mean_score - other_score)
-                
-                if dist_to_4 < dist_to_other:
-                    # Mean is closer to 4, allow it
-                    final_att = 4
-                else:
-                    # Mean is closer to the other score, use that
-                    final_att = other_score
-            elif rounded == 4:
-                # Mean rounds to 4, but neither score is 4 - push away from 4
-                # If mean is 3.5-4.4, we're in the danger zone
-                # Push down to 3 if mean < 4.0, up to 5 if mean >= 4.0
-                if mean_score < 4.0:
-                    final_att = 3
-                else:
-                    final_att = 5
-            else:
-                # Normal case: use rounded mean
-                # Examples: mean=2.3→2, mean=5.7→6, mean=1.7→2, mean=6.3→6
-                final_att = rounded
-            
-            final_att = max(1, min(7, final_att))  # Ensure 1-7 range
         
-        df_scored.at[idx, 'attachment_score'] = final_att
+        # Ensure 1-7 range
+        
+        df_scored.at[idx, 'attachment_score'] = att_strict
         
         if verbose:
             print(f"  Scores: Empathy={empathy_score}, Attachment(strict)={att_strict}, Attachment(lenient)={att_lenient}, Final={final_att}")
