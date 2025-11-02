@@ -23,12 +23,12 @@ These variables create spurious correlations by affecting both T and Y. The prim
 * **X3: Conversation Context (Dynamic Confounder)**: Factors like the **`turn` number** and **`timestamp`** (time of day) can influence both the immediate prompt/response (T) and the user's state (Y). A conversation late at night or deep into its turns has different dynamics.
     * **Control Method:** Filter out short conversations. We can include `turn` number as a variable in our matching algorithm alongside the prompt embedding.
 
-* **X4 User's Goal:** This is a powerful confounder. A user with a "socio-emotional goal" will write a prompt that *causes* the LLM to be empathetic (T) and *also* *causes* them to be more open to attachment (Y).
-    * **Control Method:** Our plan to use **semantic matching on the user's initial prompt** is the perfect way to control for this. A prompt with a "socio-emotional goal" (e.g., "I'm feeling really down today") is semantically completely different from a "task-focused goal" (e.g., "Write a Python function").
-
-* **X5: LLM Model:** This is also a confounder. A more advanced model (like GPT-4) might be inherently better at being empathetic (affects T) and simultaneously better at building rapport in other ways (affects Y), which would bias your results.
+* **X4: LLM Model:** This is also a confounder. A more advanced model (like GPT-4) might be inherently better at being empathetic (affects T) and simultaneously better at building rapport in other ways (affects Y), which would bias your results.
 
     * **Control Method:** Perform our matching analysis *separately for each model group*.
+
+* **X5 User's Goal:** This is a powerful confounder. A user with a "socio-emotional goal" will write a prompt that *causes* the LLM to be empathetic (T) and *also* *causes* them to be more open to attachment (Y).
+    * **Control Method:** Our plan to use **semantic matching on the user's initial prompt** is the perfect way to control for this. A prompt with a "socio-emotional goal" (e.g., "I'm feeling really down today") is semantically completely different from a "task-focused goal" (e.g., "Write a Python function").
 
 1.  **Filter:** Create one dataset for `gpt-4` conversations and another for `gpt-3.5-turbo`.
 2.  **Match:** Perform your semantic prompt matching *within* the `gpt-4` dataset. Then, do a separate matching *within* the `gpt-3.5-turbo` dataset.
