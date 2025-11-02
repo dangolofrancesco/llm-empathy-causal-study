@@ -89,7 +89,7 @@ EXAMPLES:
 - 7: "I've been feeling overwhelmed and talking to you really helps. Thanks for being here."
 
 DECISION RULE:
-- No personal language + minimal affect → 1-3
+- No personal language + no affect → 1-3
 - Personal language OR emotional disclosure → 5-7
 - Truly stuck between low/high → 4 (but avoid defaulting to 4)
 
@@ -159,7 +159,7 @@ def parse_score(score_text):
         return int(match.group(1))
     
     # If all strategies fail, log and return None
-    print(f"  ⚠️ Could not parse score from: '{score_text}'")
+    print(f" Could not parse score from: '{score_text}'")
     return None
 
 def get_llm_rating(response_text, prompt_template):
