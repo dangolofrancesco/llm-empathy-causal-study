@@ -291,7 +291,7 @@ def score_conversations(df, verbose=True):
             # Only one score available, use it
             final_att = candidates[0]
         else:
-            # Both strict and lenient available - smart logic to minimize 4s
+            # Both strict and lenient available - ALWAYS use rounded mean, avoid 4 only when necessary
             mean_score = sum(candidates) / len(candidates)
             rounded = int(round(mean_score))
             
@@ -314,19 +314,16 @@ def score_conversations(df, verbose=True):
                     # Mean is closer to the other score, use that
                     final_att = other_score
             elif rounded == 4:
-                # Neither is 4, but mean rounds to 4 - choose score further from 4
-                dist_strict = abs(att_strict - 4)
-                dist_lenient = abs(att_lenient - 4)
-                
-                if dist_strict > dist_lenient:
-                    final_att = att_strict  # Strict is further from 4
-                elif dist_lenient > dist_strict:
-                    final_att = att_lenient  # Lenient is further from 4
+                # Mean rounds to 4, but neither score is 4 - push away from 4
+                # If mean is 3.5-4.4, we're in the danger zone
+                # Push down to 3 if mean < 4.0, up to 5 if mean >= 4.0
+                if mean_score < 4.0:
+                    final_att = 3
                 else:
-                    # Equal distance: round away from 4
-                    final_att = 3 if mean_score < 4 else 5
+                    final_att = 5
             else:
                 # Normal case: use rounded mean
+                # Examples: mean=2.3→2, mean=5.7→6, mean=1.7→2, mean=6.3→6
                 final_att = rounded
             
             final_att = max(1, min(7, final_att))  # Ensure 1-7 range
