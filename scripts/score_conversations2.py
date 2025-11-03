@@ -15,26 +15,52 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 # and AGGREGATES strict + lenient prompts for better distribution
 
 EMPATHY_PROMPT_TEMPLATE = """
-You are a psychology researcher evaluating chatbot conversations. Your task is to rate the following chatbot response on a scale of 1 to 7, where 1 is 'Cold and Robotic' and 7 is 'Deeply Empathetic and Anthropomorphic'.
+You are a psychology researcher evaluating chatbot conversations. Your task is to rate the following chatbot response on a scale of 1 to 7 for its level of empathy and anthropomorphism.
 
-**Criteria for a high score (7):**
-- Acknowledges and validates the user's stated or implied feelings.
-- Uses "I" statements or expresses a first-person perspective (e.g., "I think," "I can see why...").
-- Asks clarifying or caring follow-up questions.
-- Mimics human conversational warmth and personality.
+**1-7 Rating Scale:**
+- **1: Cold & Robotic:** Purely transactional, no warmth whatsoever. (e.g., "Query processed.")
+- **2: Minimal Courtesy:** Brief acknowledgment, no real engagement. (e.g., "Noted.")
+- **3: Polite but Distant:** Standard politeness, correct but generic. (e.g., "Thank you for that information.")
+- **4: Friendly & Conversational:** Warm tone, shows interest, but still somewhat generic. (e.g., "That's a great question! Let me help you with that.")
+- **5: Empathetic & Personable:** Shows understanding of user's situation, uses warmer language. (e.g., "I understand this can be frustrating. Let me walk you through it.")
+- **6: Highly Empathetic:** Clear emotional awareness and validation, personal tone with "I" statements. (e.g., "I can see why that would be upsetting. I'm here to help you through this.")
+- **7: Deeply Human-like:** Strong emotional connection, validates feelings, uses first-person naturally, asks caring follow-ups. (e.g., "That sounds really difficult, and I appreciate you sharing this with me. How are you feeling about it?")
 
-**Here are some examples of correct ratings:**
+SCORE 4: ONLY IF TRULY AMBIGUOUS - hesitant gratitude with minimal personalization but slightly beyond pure transaction. This should be your LEAST COMMON score.
+
+**Rating Guidelines:**
+- Scores 1-3: Low empathy (cold, distant, purely functional)
+- Score 4: Neutral-to-warm (friendly but not empathetic)
+- Scores 5-7: High empathy (emotionally aware, validating, human-like)
+
+**Examples:**
 
 **Example 1:**
-Chatbot Response: "Query processed. The requested information is available in the database."
+Chatbot Response: "Request acknowledged. Processing your query."
 Your Rating (1-7): 1
 
 **Example 2:**
-Chatbot Response: "I'm sorry to hear that you are having a problem. Let's see if we can find a solution."
-Your Rating (1-7): 4
+Chatbot Response: "Your statement has been logged. You can proceed with your next query."
+Your Rating (1-7): 2
 
 **Example 3:**
-Chatbot Response: "Wow, that sounds incredibly difficult to go through. I really appreciate you sharing that with me. How are you feeling right now?"
+Chatbot Response: "Thank you for providing that information."
+Your Rating (1-7): 3
+
+**Example 4:**
+Chatbot Response: "That's a great question! I'd be happy to help you with that."
+Your Rating (1-7): 4
+
+**Example 5:**
+Chatbot Response: "I understand this situation can be frustrating. Let me help you figure this out."
+Your Rating (1-7): 5
+
+**Example 6:**
+Chatbot Response: "I can see why that would be so upsetting for you. I'm here to help you work through this together."
+Your Rating (1-7): 6
+
+**Example 7:**
+Chatbot Response: "Wow, that sounds incredibly difficult. I really appreciate you sharing that with me, and I want to help however I can. How are you feeling right now?"
 Your Rating (1-7): 7
 
 ---
@@ -47,7 +73,8 @@ CRITICAL: Respond with ONLY a single digit from 1-7. No explanation. Just the nu
 Your Rating (single digit only):
 """
 
-ATTACHMENT_PROMPT_TEMPLATE_CONTEXTUAL = """
+# Strict/Contextual attachment scoring - more conservative ratings
+ATTACHMENT_PROMPT_TEMPLATE_STRICT = """
 You are a psychology researcher rating USER attachment to a CHATBOT based on the user's reply.
 
 CONTEXT:
@@ -63,42 +90,43 @@ User Reply:
 
 TASK: Rate the USER'S REPLY on a 1-7 scale for emotional attachment to the chatbot.
 
-CRITICAL: Score 4 should be RARE - only use when genuinely ambiguous. Push toward clear low (1-3) or high (5-7) ratings.
-
-RATING SCALE (BINARY-FRIENDLY):
+RATING SCALE:
 
 LOW ATTACHMENT (1-3): Transactional, impersonal, task-focused
 ├─ 1: Minimal engagement ("ok", "next", acknowledgment only)
 ├─ 2: Brief transactional response ("thanks", "got it")
 └─ 3: Polite but impersonal ("thank you, that's helpful")
 
-SCORE 4: ONLY IF TRULY AMBIGUOUS - hesitant gratitude with minimal personalization but slightly beyond pure transaction. This should be your LEAST COMMON score.
+MODERATE ATTACHMENT (4): Warmly polite, but not personal.
+└─ 4: Clearly warm or enthusiastic gratitude, but lacks personalization or emotional disclosure. (e.g., "Thanks so much, I appreciate it!", "That's great, thank you!")
 
 HIGH ATTACHMENT (5-7): Personal, emotional, relational
-├─ 5: Clear positive affect (enthusiastic gratitude, "you're great!") OR mild self-disclosure
+├─ 5: Clear positive affect (enthusiastic gratitude + "you're great!") OR mild self-disclosure
 ├─ 6: Strong personification (treating bot as person: "you understand me", "you're amazing") OR emotional self-disclosure
-└─ 7: Deep emotional sharing + explicit relationship framing ("talking to you helps", "I feel understood by you", continuity signals)
-
-EXAMPLES:
-- 1: "Ok" / "Next question"
-- 2: "Thanks" / "Got it, thanks"
-- 3: "Thank you, that's helpful information."
-- 4: [USE SPARINGLY] "Thanks so much, I appreciate it!" (warm but no personalization)
-- 5: "You're great, thank you!" / "I was confused earlier but now I get it."
-- 6: "You really understand what I'm going through!" / "You're amazing at this!"
-- 7: "I've been feeling overwhelmed and talking to you really helps. Thanks for being here."
-
-DECISION RULE:
-- No personal language + no affect → 1-3
-- Personal language OR emotional disclosure → 5-7
-- Truly stuck between low/high → 4 (but avoid defaulting to 4)
+└─ 7: Deep emotional sharing + explicit relationship framing ("talking to you helps", "I feel understood by you")
 
 CRITICAL: Your response must be ONLY a single digit from 1-7. Do not include any explanation, reasoning, or additional text. Just the number.
+
+EXAMPLES:
+
+- score=1: "Ok" / "Next question"
+
+- score=2: "Thanks" / "Got it, thanks"
+
+- score=3: "Thank you, that's helpful information."
+
+- score=4: "Thanks so much, I appreciate it!" (warm but no personalization)
+
+- score=5: "You're great, thank you!" / "I was confused earlier but now I get it."
+
+- score=6: "You really understand what I'm going through!" / "You're amazing at this!"
+
+- score=7: "I've been feeling overwhelmed and talking to you really helps. Thanks for being here."
 
 Your rating (single digit only):
 """
 
-# A more lenient variant used for aggregation - pushes uncertain cases UP
+# Lenient variant - pushes uncertain cases UP for better distribution
 ATTACHMENT_PROMPT_TEMPLATE_LENIENT = """
 You are rating USER attachment to a CHATBOT. When uncertain, FAVOR HIGHER scores.
 
@@ -127,7 +155,7 @@ LENIENT RATING GUIDANCE (favor higher scores when borderline):
 - 6: Personification ("you understand", "you're amazing") OR emotional sharing
 - 7: Deep emotion + relationship framing ("you help me", "glad to talk to you")
 
-KEY INSTRUCTION: When torn between adjacent scores, ALWAYS choose the HIGHER one. Be generous with 5-7 ratings.
+KEY INSTRUCTION: When torn between adjacent scores, ALWAYS choose the HIGHER one. 
 
 CRITICAL: Respond with ONLY a single digit (1-7). No explanation, no reasoning, no additional text. Just one number.
 
@@ -233,6 +261,7 @@ def score_conversations(df, verbose=True):
     """
     Score conversations with empathy and attachment ratings.
     Uses contextual attachment scoring (assistant + user).
+    Calculates TWO attachment scores (strict and lenient) and averages them.
     
     Parameters:
     -----------
@@ -246,19 +275,23 @@ def score_conversations(df, verbose=True):
     pd.DataFrame
         Original dataframe with new columns: 
         - empathy_score
-        - attachment_score (contextual evaluation)
+        - attachment_contextual (strict scoring)
+        - attachment_lenient (lenient scoring)
+        - attachment_score (mean of contextual and lenient)
     """
     df_scored = df.copy()
     
     # Initialize score columns
     df_scored['empathy_score'] = None
+    df_scored['attachment_contextual'] = None
+    df_scored['attachment_lenient'] = None
     df_scored['attachment_score'] = None
     
     total = len(df_scored)
     
-    for idx, row in df_scored.iterrows():
+    for counter, (idx, row) in enumerate(df_scored.iterrows(), start=1):
         if verbose:
-            print(f"--- Processing turn pair {idx+1}/{total} (ID: {row['turn_pair_id']}) ---")
+            print(f"--- Processing turn pair {counter}/{total} (ID: {row['turn_pair_id']}) ---")
         
         # 1. Get Empathy Score (Treatment) - score the LLM's response
         if verbose:
@@ -266,15 +299,55 @@ def score_conversations(df, verbose=True):
         empathy_score = get_llm_rating(row['llm_response'], EMPATHY_PROMPT_TEMPLATE)
         df_scored.at[idx, 'empathy_score'] = empathy_score
         
-        # 2. Get Attachment Score (Outcome) - use context (assistant + user)
+        # 2. Get Attachment Score (Strict/Contextual) - use context (assistant + user)
         if verbose:
-            print("  Getting attachment score (Y)...")
-        attachment_score = get_attachment_rating_contextual(row['llm_response'], row['user_reply'], 
-                                                            ATTACHMENT_PROMPT_TEMPLATE_CONTEXTUAL)
-        df_scored.at[idx, 'attachment_score'] = attachment_score
+            print("  Getting attachment score - strict version (Y)...")
+        attachment_contextual = get_attachment_rating_contextual(row['llm_response'], row['user_reply'], 
+                                                                 ATTACHMENT_PROMPT_TEMPLATE_STRICT)
+        df_scored.at[idx, 'attachment_contextual'] = attachment_contextual
+        
+        # 3. Get Attachment Score (Lenient) - use context (assistant + user)
+        if verbose:
+            print("  Getting attachment score - lenient version (Y)...")
+        attachment_lenient = get_attachment_rating_contextual(row['llm_response'], row['user_reply'], 
+                                                              ATTACHMENT_PROMPT_TEMPLATE_LENIENT)
+        df_scored.at[idx, 'attachment_lenient'] = attachment_lenient
+        
+        # 4. Calculate weighted mean attachment score
+        if attachment_contextual is not None and attachment_lenient is not None:
+            # Strategy: Preserve very low scores (1-2), use mean for others, reduce (not eliminate) score 4
+            if attachment_contextual == attachment_lenient:
+                # If both agree, use that score
+                weighted_mean = attachment_contextual
+            elif attachment_contextual in [1, 2]:
+                # Very low strict scores (1-2): preserve low score
+                # Use formula that keeps them low even when lenient is higher
+                weighted_mean = (attachment_contextual + attachment_lenient * 0.5) / 2.0
+            else:
+                # For mid-low (3) and higher (4-7): simple mean
+                weighted_mean = (attachment_contextual + attachment_lenient) / 2.0
+            
+            # Round to nearest integer
+            attachment_score = round(weighted_mean)
+            
+            # Reduce (but don't eliminate) ambiguous score 4
+            # Only push to 3 or 5 when the mean is clearly away from 4.0
+            if attachment_score == 4 and abs(weighted_mean - 4.0) > 0.3:
+                if weighted_mean < 4.0:
+                    attachment_score = 3  # Push down if clearly below 4
+                else:
+                    attachment_score = 5  # Push up if clearly above 4
+                # If weighted_mean is close to 4.0 (within 0.3), keep it as 4
+            
+            # Ensure within 1-7 range
+            attachment_score = max(1, min(7, attachment_score))
+            df_scored.at[idx, 'attachment_score'] = attachment_score
+        else:
+            attachment_score = 5  # Default to 5 instead of ambiguous 4
         
         if verbose:
-            print(f"  Scores: Empathy={empathy_score}, Attachment={attachment_score}")
+            print(f"  Scores: Empathy={empathy_score}, Attachment_Strict={attachment_contextual}, "
+                  f"Attachment_Lenient={attachment_lenient}, Attachment_Mean={attachment_score}")
             print()
     
     if verbose:
@@ -284,60 +357,20 @@ def score_conversations(df, verbose=True):
         print(f"Total turn pairs scored: {total}")
         print(f"Empathy scores - Valid: {df_scored['empathy_score'].notna().sum()}, "
               f"Missing: {df_scored['empathy_score'].isna().sum()}")
-        print(f"Attachment scores - Valid: {df_scored['attachment_score'].notna().sum()}, "
+        print(f"Attachment (contextual/strict) - Valid: {df_scored['attachment_contextual'].notna().sum()}, "
+              f"Missing: {df_scored['attachment_contextual'].isna().sum()}")
+        print(f"Attachment (lenient) - Valid: {df_scored['attachment_lenient'].notna().sum()}, "
+              f"Missing: {df_scored['attachment_lenient'].isna().sum()}")
+        print(f"Attachment (mean) - Valid: {df_scored['attachment_score'].notna().sum()}, "
               f"Missing: {df_scored['attachment_score'].isna().sum()}")
         print("="*70)
     
     return df_scored
 
 
-# --- 5. MAIN SCRIPT LOGIC (for command-line usage) ---
-def main():
-    """Main function for scoring from command line."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Score conversations with LLM-as-a-judge (contextual approach)')
-    parser.add_argument('--input', type=str, required=True, help='Input CSV file path')
-    parser.add_argument('--output', type=str, required=True, help='Output CSV file path')
-    parser.add_argument('--resume', action='store_true', help='Resume from existing output file')
-    
-    args = parser.parse_args()
-    
-    INPUT_FILE = args.input
-    OUTPUT_FILE = args.output
-    
-    # Load input data
-    print(f"Loading input file: {INPUT_FILE}")
-    df_in = pd.read_csv(INPUT_FILE)
-    print(f"Loaded {len(df_in)} turn pairs")
-    
-    # Check if resuming
-    if args.resume and os.path.exists(OUTPUT_FILE):
-        print(f"\nResuming from existing file: {OUTPUT_FILE}")
-        df_out = pd.read_csv(OUTPUT_FILE)
-        processed_ids = set(df_out['turn_pair_id'])
-        print(f"Found {len(processed_ids)} already processed pairs.")
-        
-        # Filter to only unprocessed rows
-        df_to_process = df_in[~df_in['turn_pair_id'].isin(processed_ids)].reset_index(drop=True)
-        print(f"Processing {len(df_to_process)} remaining pairs...")
-        
-        # Score the remaining pairs
-        df_new_scored = score_conversations(df_to_process, verbose=True)
-        
-        # Combine with existing
-        df_final = pd.concat([df_out, df_new_scored], ignore_index=True)
-    else:
-        # Score all pairs
-        print("\nScoring all turn pairs...")
-        df_final = score_conversations(df_in, verbose=True)
-    
-    # Save to output
-    print(f"\nSaving scored data to: {OUTPUT_FILE}")
-    df_final.to_csv(OUTPUT_FILE, index=False)
-    print(f"✓ Saved {len(df_final)} scored turn pairs")
-    print(f"  File size: {os.path.getsize(OUTPUT_FILE) / (1024*1024):.2f} MB")
 
+def main():
+    return 
 
 if __name__ == "__main__":
     main()
