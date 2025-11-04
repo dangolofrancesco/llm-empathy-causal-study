@@ -230,10 +230,10 @@ def score_single_text_mistral(prompt_template, text, score_type, max_retries=3):
                 
         except Exception as e:
             # More aggressive backoff for rate limits
-            wait_time = (2 ** attempt) * 3  # Increased from 2 to 3
+            wait_time = (2 ** attempt) * 5  # Increased from 3 to 5 for better rate limit handling
             if "rate_limit" in str(e).lower() or "429" in str(e):
                 # Extra wait for rate limits
-                wait_time = wait_time + 2
+                wait_time = wait_time + 5  # Increased from 2 to 5
                 print(f"⚠️  Rate limit hit. Waiting {wait_time}s before retry {attempt + 1}/{max_retries}...")
             else:
                 print(f"⚠️  Error scoring {score_type}: {e}")
@@ -247,13 +247,24 @@ def score_single_text_mistral(prompt_template, text, score_type, max_retries=3):
 
 
 def load_progress(output_file):
-    """Load existing progress"""
+    """Load existing progress - optimized for large files"""
     if os.path.exists(output_file):
         try:
+            # First, quickly check how many rows have scores by reading in chunks
+            print("  Checking existing progress (this may take a moment)...")
+            scored_count = 0
+            chunk_size = 10000
+            
+            for chunk in pd.read_csv(output_file, chunksize=chunk_size):
+                scored_count += chunk['empathy_score'].notna().sum()
+            
+            last_processed = scored_count - 1 if scored_count > 0 else -1
+            print(f"✓ Found existing progress: {scored_count:,} conversations with scores")
+            if scored_count > 0:
+                print(f"  Will resume from row {last_processed + 1}")
+            
+            # Now load the full file (we need it anyway)
             df_scored = pd.read_csv(output_file)
-            last_processed = len(df_scored) - 1
-            print(f"✓ Found existing progress: {len(df_scored):,} rows already scored")
-            print(f"  Will resume from row {last_processed + 1}")
             return df_scored, last_processed
         except Exception as e:
             print(f"⚠️  Could not load progress file: {e}")
@@ -326,8 +337,8 @@ def score_conversations_mistral(input_file, output_file, chunk_size=1000, start_
     print(f"Already processed:    {start_idx:,}")
     print(f"Remaining:            {remaining:,}")
     print(f"Chunk size:           {chunk_size:,}")
-    print(f"Expected rate:        ~0.8 conv/s (conservative delays to avoid rate limits)")
-    print(f"Estimated time:       {remaining/(0.8*3600):.1f} hours")
+    print(f"Expected rate:        ~0.5 conv/s (VERY conservative to avoid rate limits)")
+    print(f"Estimated time:       {remaining/(0.5*3600):.1f} hours")
     print(f"{'='*70}\n")
     
     if remaining == 0:
@@ -347,11 +358,10 @@ def score_conversations_mistral(input_file, output_file, chunk_size=1000, start_
             'empathy'
         )
         
-        # Conservative delay between API calls to stay well under 200 RPM
-        # 200 RPM = 3.33 req/s max, but in practice need to be more conservative
-        # With 2 requests per conversation + safety margin
-        # 0.6s between calls = ~1.7 req/s = 102 RPM = well under limit
-        time.sleep(0.6)
+        # VERY conservative delay between API calls to avoid rate limits
+        # Mistral free tier seems to have stricter limits than advertised
+        # Increasing from 0.6s to 1.0s between calls
+        time.sleep(1.0)
         
         attachment_score = score_single_text_mistral(
             ATTACHMENT_PROMPT_TEMPLATE,
@@ -359,8 +369,9 @@ def score_conversations_mistral(input_file, output_file, chunk_size=1000, start_
             'attachment'
         )
         
-        # Another delay after each conversation (total ~1.2s per conv)
-        time.sleep(0.6)
+        # Another delay after each conversation (total ~2.0s per conv = 0.5 conv/s)
+        # This is more conservative but should eliminate rate limits
+        time.sleep(1.0)
         
         df_scored.at[i, 'empathy_score'] = empathy_score
         df_scored.at[i, 'attachment_score'] = attachment_score
