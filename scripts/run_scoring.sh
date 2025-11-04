@@ -25,10 +25,9 @@ mkdir -p logs
 
 # Start scoring (output also to log file)
 # -u flag for unbuffered output so progress appears in real-time
-# --parallel 3: Process 3 conversations in parallel (safer for free tier rate limits)
+# Sequential processing for stability (no parallelization)
 python3 -u scripts/score_conversations_incremental.py \
     --input data/filtered/wildchat_full_preprocessed.csv \
     --output data/scores/wildchat_full_scored_incremental.csv \
     --chunk-size 1000 \
-    --parallel 1 \
     2>&1 | tee logs/scoring_progress.log
