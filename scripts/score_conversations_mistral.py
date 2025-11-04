@@ -331,14 +331,16 @@ def score_conversations_mistral(input_file, output_file, chunk_size=1000, start_
     remaining = total_rows - start_idx
     
     print(f"\n{'='*70}")
-    print("PROCESSING PLAN")
+    print("PROCESSING PLAN - SAMPLING APPROACH")
     print(f"{'='*70}")
     print(f"Total rows:           {total_rows:,}")
     print(f"Already processed:    {start_idx:,}")
     print(f"Remaining:            {remaining:,}")
     print(f"Chunk size:           {chunk_size:,}")
-    print(f"Expected rate:        ~0.5 conv/s (VERY conservative to avoid rate limits)")
-    print(f"Estimated time:       {remaining/(0.5*3600):.1f} hours")
+    print(f"Expected rate:        ~0.33 conv/s (balanced for sampling)")
+    print(f"Estimated time:       {remaining/(0.33*3600):.1f} hours")
+    print(f"\n💡 Target: 10k-20k scored conversations for valid analysis")
+    print(f"   Stop script when target is reached")
     print(f"{'='*70}\n")
     
     if remaining == 0:
@@ -358,10 +360,10 @@ def score_conversations_mistral(input_file, output_file, chunk_size=1000, start_
             'empathy'
         )
         
-        # VERY conservative delay between API calls to avoid rate limits
-        # Mistral free tier seems to have stricter limits than advertised
-        # Increasing from 0.6s to 1.0s between calls
-        time.sleep(1.0)
+        # Conservative delay between API calls to manage rate limits
+        # For sampling approach: aim for steady progress, tolerate occasional rate limits
+        # 1.5s between calls for balance between speed and stability
+        time.sleep(1.5)
         
         attachment_score = score_single_text_mistral(
             ATTACHMENT_PROMPT_TEMPLATE,
@@ -369,9 +371,9 @@ def score_conversations_mistral(input_file, output_file, chunk_size=1000, start_
             'attachment'
         )
         
-        # Another delay after each conversation (total ~2.0s per conv = 0.5 conv/s)
-        # This is more conservative but should eliminate rate limits
-        time.sleep(1.0)
+        # Another delay after each conversation (total ~3.0s per conv = 0.33 conv/s)
+        # Balanced for sampling: faster than 0.2 but more stable than 0.5
+        time.sleep(1.5)
         
         df_scored.at[i, 'empathy_score'] = empathy_score
         df_scored.at[i, 'attachment_score'] = attachment_score
