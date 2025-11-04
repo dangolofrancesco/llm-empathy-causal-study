@@ -236,42 +236,7 @@ def save_checkpoint(df_scored, output_file):
         return False
 
 
-def score_conversation_parallel(row_data: Tuple[int, pd.Series]) -> Tuple[int, Optional[int], Optional[int]]:
-    """
-    Score both empathy and attachment for a single conversation in parallel.
-    
-    Args:
-        row_data: Tuple of (index, row Series)
-        
-    Returns:
-        Tuple of (index, empathy_score, attachment_score)
-    """
-    idx, row = row_data
-    
-    # Use ThreadPoolExecutor to run both API calls in parallel
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        # Submit both scoring tasks
-        empathy_future = executor.submit(
-            score_single_text,
-            EMPATHY_PROMPT_TEMPLATE,
-            row['llm_response'],
-            'empathy'
-        )
-        attachment_future = executor.submit(
-            score_single_text,
-            ATTACHMENT_PROMPT_TEMPLATE,
-            row['user_reply'],
-            'attachment'
-        )
-        
-        # Wait for both to complete
-        empathy_score = empathy_future.result()
-        attachment_score = attachment_future.result()
-    
-    return idx, empathy_score, attachment_score
-
-
-def score_conversations_incremental(input_file, output_file, chunk_size=1000, start_from=None, parallel_conversations=5):
+def score_conversations_incremental(input_file, output_file, chunk_size=1000, start_from=None):
     """
     Score conversations incrementally with automatic checkpointing.
     
@@ -288,13 +253,13 @@ def score_conversations_incremental(input_file, output_file, chunk_size=1000, st
     
     # Load input dataset
     print(f"\n{'='*70}")
-    print("INCREMENTAL SCORING - STARTING (PARALLEL MODE)")
+    print("INCREMENTAL SCORING - STARTING (SEQUENTIAL MODE)")
     print(f"{'='*70}")
     print(f"\nLoading dataset: {input_file}")
     df_input = pd.read_csv(input_file)
     total_rows = len(df_input)
     print(f"Total conversations to score: {total_rows:,}")
-    print(f"Parallel processing: {parallel_conversations} conversations at a time")
+    print(f"Processing: Sequential (one at a time for stability)")
     
     # Check for existing progress
     df_scored, last_processed = load_progress(output_file)
@@ -347,7 +312,6 @@ def score_conversations_incremental(input_file, output_file, chunk_size=1000, st
     print(f"Chunk size:           {chunk_size:,}")
     print(f"Estimated chunks:     {(remaining + chunk_size - 1) // chunk_size:,}")
     print(f"Save frequency:       Every {chunk_size} conversations")
-    print(f"Parallel workers:     {parallel_conversations} conversations")
     print(f"{'='*70}\n")
     
     if remaining == 0:
@@ -359,62 +323,73 @@ def score_conversations_incremental(input_file, output_file, chunk_size=1000, st
     failed_count = 0
     start_time = time.time()
     
-    # Process in batches for parallel execution
-    with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_conversations) as executor:
-        for batch_start in range(start_idx, total_rows, parallel_conversations):
-            batch_end = min(batch_start + parallel_conversations, total_rows)
-            batch_indices = range(batch_start, batch_end)
+    # Process sequentially (no parallelization for stability)
+    for i in range(start_idx, total_rows):
+        row = df_input.iloc[i]
+        
+        # Score empathy (sequential)
+        empathy_score = score_single_text(
+            EMPATHY_PROMPT_TEMPLATE, 
+            row['llm_response'], 
+            'empathy'
+        )
+        
+        # Score attachment (sequential)
+        attachment_score = score_single_text(
+            ATTACHMENT_PROMPT_TEMPLATE,
+            row['user_reply'],
+            'attachment'
+        )
+        
+        # Update dataframe
+        df_scored.at[i, 'empathy_score'] = empathy_score
+        df_scored.at[i, 'attachment_score'] = attachment_score
+        
+        if empathy_score is None or attachment_score is None:
+            failed_count += 1
+        
+        processed_in_session += 1
+        
+        # Progress indicator
+        if processed_in_session % 10 == 0:
+            progress = (processed_in_session / remaining) * 100
+            elapsed = time.time() - start_time
+            rate = processed_in_session / elapsed if elapsed > 0 else 0
+            eta_seconds = (remaining - processed_in_session) / rate if rate > 0 else 0
+            eta_minutes = eta_seconds / 60
+            eta_hours = eta_minutes / 60
+            elapsed_minutes = elapsed / 60
+            elapsed_hours = elapsed_minutes / 60
             
-            # Prepare batch data
-            batch_data = [(i, df_input.iloc[i]) for i in batch_indices]
+            # Format elapsed time
+            if elapsed_hours >= 1:
+                elapsed_str = f"{elapsed_hours:.1f}h"
+            else:
+                elapsed_str = f"{elapsed_minutes:.1f}m"
             
-            # Process batch in parallel
-            futures = {executor.submit(score_conversation_parallel, data): data[0] for data in batch_data}
+            # Format ETA
+            if eta_hours >= 1:
+                eta_str = f"{eta_hours:.1f}h"
+            else:
+                eta_str = f"{eta_minutes:.0f}m"
             
-            for future in concurrent.futures.as_completed(futures):
-                idx = futures[future]
-                try:
-                    i, empathy_score, attachment_score = future.result()
-                    
-                    # Update dataframe
-                    df_scored.at[i, 'empathy_score'] = empathy_score
-                    df_scored.at[i, 'attachment_score'] = attachment_score
-                    
-                    if empathy_score is None or attachment_score is None:
-                        failed_count += 1
-                    
-                    processed_in_session += 1
-                    
-                    # Progress indicator
-                    if processed_in_session % 10 == 0:
-                        progress = (processed_in_session / remaining) * 100
-                        elapsed = time.time() - start_time
-                        rate = processed_in_session / elapsed if elapsed > 0 else 0
-                        eta_seconds = (remaining - processed_in_session) / rate if rate > 0 else 0
-                        eta_minutes = eta_seconds / 60
-                        
-                        print(f"Processing: {processed_in_session:,}/{remaining:,} ({progress:.1f}%) | "
-                              f"Rate: {rate:.2f} conv/s | ETA: {eta_minutes:.1f} min", end='\r')
-                    
-                except Exception as e:
-                    print(f"\n⚠️  Error processing conversation {idx}: {e}")
-                    failed_count += 1
-                    processed_in_session += 1
+            print(f"Processing: {processed_in_session:,}/{remaining:,} ({progress:.1f}%) | "
+                  f"Rate: {rate:.2f} conv/s | Elapsed: {elapsed_str} | ETA: {eta_str}", end='\r')
+        
+        # Save checkpoint every chunk_size rows
+        if processed_in_session % chunk_size == 0:
+            print(f"\n\n{'='*70}")
+            print(f"CHECKPOINT - Saving progress...")
+            print(f"{'='*70}")
+            if save_checkpoint(df_scored, output_file):
+                print(f"✓ Saved {i + 1:,} conversations")
+                print(f"  Failed so far: {failed_count}")
+                print(f"{'='*70}\n")
+            else:
+                print(f"❌ Failed to save checkpoint!")
             
-            # Save checkpoint every chunk_size rows
-            if processed_in_session % chunk_size < parallel_conversations and processed_in_session >= chunk_size:
-                print(f"\n\n{'='*70}")
-                print(f"CHECKPOINT - Saving progress...")
-                print(f"{'='*70}")
-                if save_checkpoint(df_scored, output_file):
-                    print(f"✓ Saved {batch_end:,} conversations")
-                    print(f"  Failed so far: {failed_count}")
-                    print(f"{'='*70}\n")
-                else:
-                    print(f"❌ Failed to save checkpoint!")
-                
-                # Brief pause to respect rate limits
-                time.sleep(0.5)
+            # Brief pause to respect rate limits
+            time.sleep(1)
     
     # Final save
     print(f"\n\n{'='*70}")
@@ -449,7 +424,7 @@ def score_conversations_incremental(input_file, output_file, chunk_size=1000, st
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Score conversations incrementally with automatic checkpointing and parallel processing'
+        description='Score conversations incrementally with automatic checkpointing (sequential processing)'
     )
     parser.add_argument('--input', required=True, help='Input CSV file path')
     parser.add_argument('--output', required=True, help='Output CSV file path')
@@ -457,8 +432,6 @@ def main():
                         help='Save progress every N conversations (default: 1000)')
     parser.add_argument('--start-from', type=int, default=None,
                         help='Start from specific row number (overrides auto-resume)')
-    parser.add_argument('--parallel', type=int, default=5,
-                        help='Number of conversations to process in parallel (default: 5)')
     
     args = parser.parse_args()
     
@@ -467,8 +440,7 @@ def main():
         args.input,
         args.output,
         chunk_size=args.chunk_size,
-        start_from=args.start_from,
-        parallel_conversations=args.parallel
+        start_from=args.start_from
     )
 
 
