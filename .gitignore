@@ -50,6 +50,9 @@ coverage.xml
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb_checkpoints/
+models/
+Summaries/
+outputs/
 
 # Environment variables
 .env
