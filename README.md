@@ -1,5 +1,6 @@
 # llm-empathy-causal-study
-With this project we aim to determine if a more empathetic chatbot response causally increases a user’s immediate emotional attachment.
+With this project we aim to determine if a more empathetic chatbot response causally increases a user’s immediate emotional attachment. 
+To determine whether or not a chatbot's responses are direct causes of attachment or simply reactions to the users' behaviour.
 
 # Research Project Causal Model
 
