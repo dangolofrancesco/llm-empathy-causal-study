@@ -5,8 +5,8 @@ import torch
 import sys
 
 # Configuration
-INPUT_FILE = "wildchat_filtered.jsonl"  # READING JSONL NOW
-OUTPUT_FILE = "wildchat_social_only.jsonl" # SAVING AS JSONL
+INPUT_FILE = "data/wildchat_english_5plus_turns.jsonl"  # READING JSONL NOW
+OUTPUT_FILE = "wildchat_social_only_5plus.jsonl" # SAVING AS JSONL
 
 # Labels
 CANDIDATE_LABELS = [
