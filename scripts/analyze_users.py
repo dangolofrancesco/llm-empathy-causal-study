@@ -202,42 +202,56 @@ def convert_jsonl_to_csv(jsonl_path, csv_path=None, max_rows=None):
     rows_written = 0
     conversations_processed = 0
     
+    # First, collect all user_hashed_ip to conversation_hash mapping
+    user_convs = defaultdict(set)
+    all_rows = []
+    with open(jsonl_path, 'r', encoding='utf-8') as infile:
+        for line in infile:
+            try:
+                data = json.loads(line)
+                conversation_hash = data.get('conversation_hash', '')
+                conversation = data.get('conversation', [])
+                for msg in conversation:
+                    if msg.get('role') == 'user':
+                        user_hashed_ip = msg.get('hashed_ip', '')
+                        if user_hashed_ip:
+                            user_convs[user_hashed_ip].add(conversation_hash)
+            except Exception:
+                continue
+
+    # Now, only keep rows for users with >1 conversation
+    multi_conv_users = {u for u, convs in user_convs.items() if len(convs) > 1}
+
     with open(jsonl_path, 'r', encoding='utf-8') as infile, \
          open(csv_path, 'w', newline='', encoding='utf-8') as outfile:
-        
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
         writer.writeheader()
-        
+        rows_written = 0
+        conversations_processed = 0
         for line_num, line in enumerate(infile, 1):
             if max_rows and rows_written >= max_rows:
                 print(f"  Reached maximum rows limit ({max_rows})")
                 break
-                
             if line_num % 1000 == 0:
                 print(f"  Processed {line_num} conversations, wrote {rows_written} rows...")
-            
             try:
                 data = json.loads(line)
                 conversation_hash = data.get('conversation_hash', '')
                 model = data.get('model', '')
                 conv_timestamp = data.get('timestamp', '')
                 conversation = data.get('conversation', [])
-                
-                # Count turns as user-agent pairs (count user messages)
                 total_turns = sum(1 for msg in conversation if msg.get('role') == 'user')
-                
                 conversations_processed += 1
-                
-                # Pair up user and assistant messages into turns
                 turn_number = 0
                 i = 0
                 while i < len(conversation):
                     msg = conversation[i]
-                    
                     if msg.get('role') == 'user':
+                        user_hashed_ip = msg.get('hashed_ip', '')
+                        if user_hashed_ip not in multi_conv_users:
+                            i += 1
+                            continue
                         turn_number += 1
-                        
-                        # Initialize row with conversation metadata and user data
                         row = {
                             'conversation_hash': conversation_hash,
                             'conversation_model': model,
@@ -245,7 +259,7 @@ def convert_jsonl_to_csv(jsonl_path, csv_path=None, max_rows=None):
                             'total_turns': total_turns,
                             'turn_number': turn_number,
                             'user_content': msg.get('content', '').replace('\n', ' '),
-                            'user_hashed_ip': msg.get('hashed_ip', ''),
+                            'user_hashed_ip': user_hashed_ip,
                             'user_country': msg.get('country', ''),
                             'user_state': msg.get('state', ''),
                             'user_language': msg.get('language', ''),
@@ -260,8 +274,6 @@ def convert_jsonl_to_csv(jsonl_path, csv_path=None, max_rows=None):
                             'assistant_turn_identifier': '',
                             'assistant_timestamp': ''
                         }
-                        
-                        # Look for the next assistant message
                         if i + 1 < len(conversation) and conversation[i + 1].get('role') == 'assistant':
                             assistant_msg = conversation[i + 1]
                             row['assistant_content'] = assistant_msg.get('content', '').replace('\n', ' ')
@@ -270,25 +282,19 @@ def convert_jsonl_to_csv(jsonl_path, csv_path=None, max_rows=None):
                             row['assistant_redacted'] = assistant_msg.get('redacted', '')
                             row['assistant_turn_identifier'] = assistant_msg.get('turn_identifier', '')
                             row['assistant_timestamp'] = assistant_msg.get('timestamp', '')
-                            i += 1  # Skip the assistant message since we've processed it
-                        
+                            i += 1
                         writer.writerow(row)
                         rows_written += 1
-                        
                         if max_rows and rows_written >= max_rows:
                             break
-                    
                     i += 1
-                        
             except json.JSONDecodeError as e:
                 print(f"Warning: Error parsing line {line_num}: {e}")
                 continue
-    
     print(f"\n✓ Conversion complete!")
     print(f"  Conversations processed: {conversations_processed:,}")
     print(f"  Rows written: {rows_written:,}")
     print(f"  Output file: {csv_path}")
-    
     return csv_path
 
 
@@ -360,7 +366,7 @@ def main():
     if len(sys.argv) > 1:
         filename = sys.argv[1]
     else:
-        filename = 'wildchat_social_only.jsonl'
+        filename = 'wildchat_social_only_5plus.jsonl'
     
     # Define the data path
     data_path = Path(__file__).parent.parent / 'data' / filename
