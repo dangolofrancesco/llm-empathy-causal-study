@@ -18,6 +18,7 @@ Usage:
     python3 scripts/score_big_five.py --provider groq
     python3 scripts/score_big_five.py --provider openai --model gpt-4o
     python3 scripts/score_big_five.py --provider mistral --max_chars 6000 --delay 0.3
+    python3 scripts/score_big_five.py --provider mistral --resume --limit 50
 """
 
 import argparse
@@ -28,7 +29,8 @@ import re
 from pathlib import Path
 
 import pandas as pd
-
+import os
+os.environ["MISTRAL_API_KEY"] = "lplY8dzzqH1hPHfXrdj3ACp1H3wPazvf"
 # ── Client factory ────────────────────────────────────────────────────────────
 
 PROVIDER_DEFAULTS = {
@@ -204,6 +206,8 @@ def main():
                         help="Seconds to wait between API calls (default: 0.3)")
     parser.add_argument("--resume",    action="store_true",
                         help="Skip users already present in the output JSONL file")
+    parser.add_argument("--limit",     type=int, default=None,
+                        help="Stop after scoring this many users (default: score all)")
     args = parser.parse_args()
 
     model = args.model or PROVIDER_DEFAULTS[args.provider]
@@ -227,17 +231,28 @@ def main():
                 line = line.strip()
                 if line:
                     record = json.loads(line)
-                    already_scored[record["user_hashed_ip"]] = record
-        print(f"[INFO] Resuming: {len(already_scored)} users already scored.")
+                    uid = record["user_hashed_ip"]
+                    # Only count as done if ALL five traits are present and non-null
+                    if all(record.get(t) is not None for t in TRAITS):
+                        already_scored[uid] = record
+        print(f"[INFO] Resuming: {len(already_scored)} users already fully scored.")
 
     # ── Build LLM client ───────────────────────────────────────────────────────
     client = build_client(args.provider)
 
     # ── Score each user ────────────────────────────────────────────────────────
     results: list[dict] = list(already_scored.values())
+    scored_count = 0
+
+    if args.limit is not None:
+        print(f"[INFO] Limit    : {args.limit} users")
 
     with open(jsonl_path, "a", encoding="utf-8") as out_f:
         for i, row in df.iterrows():
+            if args.limit is not None and scored_count >= args.limit:
+                print(f"[INFO] Reached limit of {args.limit} users — stopping.")
+                break
+
             uid  = str(row["user_hashed_ip"])
             conv = str(row.get("conversation", ""))
 
@@ -260,6 +275,7 @@ def main():
             out_f.write(json.dumps(record) + "\n")
             out_f.flush()
             results.append(record)
+            scored_count += 1
 
             time.sleep(args.delay)
 
